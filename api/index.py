@@ -36,7 +36,7 @@ def initialize_components():
         # Connect LangSmith Observability Platform (Automatically handled on Vercel)
         os.environ["LANGSMITH_TRACING"] = "true"
         os.environ["LANGSMITH_ENDPOINT"] = "https://api.smith.langchain.com"
-        os.environ["LANGSMITH_PROJECT"] = "Medium_Article_RAG"
+        os.environ["LANGSMITH_PROJECT"] = "ass1"
         
         # Instantiate your specific course chat model
         llm = ChatOpenAI(
