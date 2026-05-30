@@ -10,7 +10,7 @@ from langchain_pinecone import PineconeVectorStore
 # Centralized so they stay synchronized across the entire app
 CHUNK_SIZE = 512
 OVERLAP_RATIO = 0.2
-TOP_K = 7
+TOP_K = 20
 
 # ==========================================
 # 2. SECURE ENVIRONMENT INITIALIZATION
