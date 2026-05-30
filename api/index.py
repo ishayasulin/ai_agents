@@ -43,7 +43,6 @@ def initialize_components():
             model="4UHRUIN-gpt-5-mini",
             api_key=LLMOD_API_KEY,
             base_url=LLMOD_BASE_URL,
-            temperature=0.0 # Force deterministic responses for grading accuracy
         )
 
         # Instantiate your specific course embedding client
