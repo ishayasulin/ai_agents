@@ -4,74 +4,66 @@ from http.server import BaseHTTPRequestHandler
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 
-# ==========================================
-# 1. FIXED SYSTEM HYPERPARAMETERS
-# ==========================================
-# Centralized so they stay synchronized across the entire app
+# hyperparameters
 CHUNK_SIZE = 512
 OVERLAP_RATIO = 0.2
 TOP_K = 20
 
-# ==========================================
-# 2. SECURE ENVIRONMENT INITIALIZATION
-# ==========================================
+# env vars
 LLMOD_API_KEY = os.environ.get("LLMOD_API_KEY")
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
 
 LLMOD_BASE_URL = "https://api.llmod.ai/v1"
 PINECONE_INDEX_NAME = "ass1"
 
-# Global application variables to be configured on the first request
+# global vars
 llm = None
 embeddings = None
 vectorstore = None
 
 def initialize_components():
-    """Safely handles initialization once keys are available in the runtime."""
     global llm, embeddings, vectorstore
     if llm is None and LLMOD_API_KEY and PINECONE_API_KEY:
         # Enforce required Pinecone credential linkage
         os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
         
-        # Connect LangSmith Observability Platform (Automatically handled on Vercel)
+        # connect LangSmith
         os.environ["LANGSMITH_TRACING"] = "true"
         os.environ["LANGSMITH_ENDPOINT"] = "https://api.smith.langchain.com"
         os.environ["LANGSMITH_PROJECT"] = "ass1"
         
-        # Instantiate your specific course chat model
+        # initiate models
         llm = ChatOpenAI(
             model="4UHRUIN-gpt-5-mini",
             api_key=LLMOD_API_KEY,
             base_url=LLMOD_BASE_URL,
         )
 
-        # Instantiate your specific course embedding client
+        # initiate embedding client
         embeddings = OpenAIEmbeddings(
             model="4UHRUIN-text-embedding-3-small",
             api_key=LLMOD_API_KEY,
             base_url=LLMOD_BASE_URL
         )
         
-        # Map the existing index structure
+        # map the existing index structure
         vectorstore = PineconeVectorStore(
             index_name=PINECONE_INDEX_NAME, 
             embedding=embeddings
         )
 
-# ==========================================
-# 3. ROUTED HTTP REQUEST HANDLER
-# ==========================================
+# routes handler
 class handler(BaseHTTPRequestHandler):
     
-    # --- GET CAPABILITIES (Handles /api/stats) ---
+    # GET
     def do_GET(self):
-        # Match incoming path exactly as specified in API Requirements
+        # match incoming path
         if self.path.endswith('/api/stats'):
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             
-            # The STRICT JSON output layout mandated by page 5 of the spec
+            # json output
             stats_payload = {
                 "chunk_size": CHUNK_SIZE,
                 "overlap_ratio": OVERLAP_RATIO,
@@ -82,12 +74,12 @@ class handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-    # --- POST CAPABILITIES (Handles /api/prompt) ---
+    # POST
     def do_POST(self):
         if self.path.endswith('/api/prompt'):
             initialize_components()
             
-            # Ensure database instances are properly hooked
+            # edge cases
             if not vectorstore or not llm:
                 self.send_response(500)
                 self.send_header('Content-type', 'application/json')
@@ -95,7 +87,7 @@ class handler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "Application API keys are not initialized in Vercel environment variables."}).encode('utf-8'))
                 return
 
-            # Read incoming web payload length and decode the JSON body
+            # read payload length and decode the body
             content_length = int(self.headers.get('Content-Length', 0))
             post_data = self.rfile.read(content_length)
             
@@ -103,7 +95,7 @@ class handler(BaseHTTPRequestHandler):
                 body = json.loads(post_data.decode('utf-8'))
                 question = body.get("question", "")
                 
-                # STEP A: Retrieve identical matches alongside their required float scores
+                # retrieve identical matches and scores - RETRIVAL
                 docs_and_scores = vectorstore.similarity_search_with_score(question, k=TOP_K)
                 
                 context_text = ""
@@ -112,7 +104,7 @@ class handler(BaseHTTPRequestHandler):
                 for doc, score in docs_and_scores:
                     context_text += f"Title: {doc.metadata.get('title')}\nAuthor: {doc.metadata.get('authors')}\nContent: {doc.page_content}\n\n"
                     
-                    # Dynamically piece together the required structural list format
+                    # piece together the required structural list format
                     json_context_array.append({
                         "article_id": str(doc.metadata.get("article_id", "Unknown")),
                         "title": str(doc.metadata.get("title", "Unknown Title")),
@@ -120,7 +112,7 @@ class handler(BaseHTTPRequestHandler):
                         "score": float(score)
                     })
                 
-                # STEP B: Construct the exact MANDATORY System String
+                # construct the System String - AUGMENTATION
                 system_prompt = (
                     """"
                     You are a Medium-article assistant that answers questions strictly and only
@@ -136,13 +128,13 @@ class handler(BaseHTTPRequestHandler):
                 )
                 user_prompt = f"Retrieved Context:\n{context_text}\n\nQuestion: {question}"
                 
-                # STEP C: Fire response to GPT-5-mini
+                # send response to GPT-5-mini - GENERATION
                 response = llm.invoke([
                     ("system", system_prompt), 
                     ("user", user_prompt)
                 ])
                 
-                # STEP D: Compile the strict output format required by page 5
+                # compile the strict output
                 result_payload = {
                     "response": response.content,
                     "context": json_context_array,
